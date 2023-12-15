@@ -1,84 +1,100 @@
 from flask import Flask, render_template, request, jsonify
+import math
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import tensorflow as tf
 from sklearn.preprocessing import MinMaxScaler
+from tensorflow.keras import Sequential
+from tensorflow.keras.layers import Dense, LSTM, Dropout
 import pandas_datareader as pdr
 
 app = Flask(__name__)
+training_data_len = 0
 
-key = "30c0973b8a648106ae38faea9031b9a3924c7469"
+# Function to load and preprocess the data
+def load_data():
+    key = "30c0973b8a648106ae38faea9031b9a3924c7469"
+    df = pdr.get_data_tiingo('DIS', api_key=key)
+    df.to_csv('DIS.csv')
+    df = pd.read_csv('DIS.csv', date_parser=True)
 
-# Load the dataset
-df = pdr.get_data_tiingo('DIS', api_key=key)
-df.to_csv('DIS.csv')
-df = pd.read_csv('DIS.csv', date_parser=True)
+    scaler = MinMaxScaler(feature_range=(0, 1))
+    data = df.filter(['close']).values
+    scaled_data = scaler.fit_transform(data)
 
-# Preprocess the data
-data = df.filter(['close'])
-dataset = data.values
-scaler = MinMaxScaler(feature_range=(0, 1))
-scaled_data = scaler.fit_transform(dataset)
-np.save('scaler_params.npy', [scaler.min_, scaler.scale_])
+    return df, scaler, scaled_data
 
-# Create the training dataset
-train_data_len = int(len(dataset) * 0.8)
-train_data = scaled_data[0:train_data_len, :]
+# Function to build and train the LSTM model
+def build_train_model(scaled_data):
+    training_data_len = math.ceil(len(scaled_data) * 0.8)
+    train_data = scaled_data[0:training_data_len, :]
 
-x_train, y_train = [], []
-for i in range(60, len(train_data)):
-    x_train.append(train_data[i-60:i, 0])
-    y_train.append(train_data[i, 0])
+    x_train, y_train = [], []
+    for i in range(60, len(train_data)):
+        x_train.append(train_data[i-60:i, 0])
+        y_train.append(train_data[i, 0])
 
-x_train, y_train = np.array(x_train), np.array(y_train)
-x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 1))
+    x_train, y_train = np.array(x_train), np.array(y_train)
+    x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 1))
 
-# Build and train the LSTM model
-model = tf.keras.Sequential()
-model.add(tf.keras.layers.LSTM(50, return_sequences=True, input_shape=(x_train.shape[1], 1)))
-model.add(tf.keras.layers.LSTM(50, return_sequences=False))
-model.add(tf.keras.layers.Dense(25))
-model.add(tf.keras.layers.Dense(1))
-model.compile(optimizer='adam', loss='mean_squared_error')
-model.fit(x_train, y_train, batch_size=32, epochs=10)
-model.save('stock_price_prediction_model.h5')
+    model = Sequential()
+    model.add(LSTM(50, return_sequences=True, input_shape=(x_train.shape[1], 1)))
+    model.add(LSTM(50, return_sequences=False))
+    model.add(Dense(25))
+    model.add(Dense(1))
+    model.compile(optimizer='adam', loss='mean_squared_error')
+    model.fit(x_train, y_train, batch_size=32, epochs=10)
 
-# Load the trained model
-model = tf.keras.models.load_model('stock_price_prediction_model.h5')
+    return model
 
+# Function to predict and visualize the data
+def predict_visualize_data(model, scaled_data, scaler, df):
+    global training_data_len  # Ensure access to the global variable
+
+    test_data = scaled_data[training_data_len - 60:, :]
+
+    x_test=[]
+    # y_test = df['close'][training_data_len:].values
+    y_test=df[training_data_len:, :]
+    for i in range(60, len(test_data)):
+        x_test.append(test_data[i-60:i, 0])
+
+    x_test = np.array(x_test)
+    x_test = np.reshape(x_test, (x_test.shape[0], x_test.shape[1], 1))
+
+    predictions = model.predict(x_test)
+    predictions = scaler.inverse_transform(predictions)
+
+    rmse = np.sqrt(np.mean(predictions - y_test) ** 2)
+    print(f"RMSE: {rmse}")
+
+    train = df[:training_data_len]
+    test = df[training_data_len:]
+    test['predictions'] = predictions
+
+    plt.figure(figsize=(16, 8))
+    plt.title('Model')
+    plt.xlabel('Date')
+    plt.ylabel('Close Price USD ($)')
+    plt.plot(train['close'])
+    plt.plot(test[['close', 'predictions']])
+    plt.legend(['Train', 'Test', 'Predictions'], loc='lower right')
+    plt.savefig('static/plot.png')
+
+# Route for the main page
 @app.route('/')
 def index():
     return render_template('index.html')
 
+# Route for handling the button click event
 @app.route('/run_model', methods=['POST'])
 def run_model():
-    # Load the scaler parameters
-    scaler_params = np.load('scaler_params.npy', allow_pickle=True)
-    scaler = MinMaxScaler(feature_range=(0, 1))
-    scaler.min_, scaler.scale_ = scaler_params
+    df, scaler, scaled_data = load_data()
+    model = build_train_model(scaled_data)
+    predict_visualize_data(model, scaled_data, scaler, df)
+    return jsonify({'result': 'Model executed successfully'})
 
-    # Preprocess the latest data
-    latest_data = df.filter(['close'])
-    latest_dataset = latest_data.values
-    latest_scaled_data = scaler.transform(latest_dataset)
-    last_60_days = latest_scaled_data[-60:].reshape(1, -1, 1)
-
-    # Get the predicted price
-    pred_price = model.predict(last_60_days)
-    pred_price = scaler.inverse_transform(pred_price)
-
-    # Plot and save the graph
-    plt.figure(figsize=(16, 8))
-    plt.title('Model Prediction')
-    plt.xlabel('Date')
-    plt.ylabel('Close Price USD ($)')
-    plt.plot(dataset, label='Actual Data')
-    plt.plot(np.append(dataset[-60:], pred_price[0]), label='Prediction', linestyle='dashed')
-    plt.legend()
-    plt.savefig('static/prediction_plot.png')
-
-    return jsonify({'pred_price': pred_price[0][0]})
-
+# Run the Flask app
 if __name__ == '__main__':
     app.run(debug=True)

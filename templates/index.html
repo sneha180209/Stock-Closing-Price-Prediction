@@ -1,14 +1,35 @@
+<!-- index.html -->
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stock Prediction</title>
+    <title>Your Flask App</title>
 </head>
 <body>
-    <form action="/run_model" method="post">
-        <input type="submit" value="Run Model">
+    <h1>Welcome to Your Flask App</h1>
+    <form id="runModelForm">
+        <button type="button" onclick="runModel()">Run Model</button>
     </form>
+    <div id="result"></div>
+
+    <script>
+        function runModel() {
+            // Use AJAX to send a POST request to the Flask route
+            fetch('/run_model', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Display the result on the page
+                document.getElementById('result').innerText = data.result;
+            })
+            .catch(error => console.error('Error:', error));
+        }
+    </script>
 </body>
 </html>
