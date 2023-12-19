@@ -50,23 +50,26 @@ def build_train_model(scaled_data):
 
 # Function to predict and visualize the data
 # Function to predict and visualize the data
+# Function to predict and visualize the data
 def predict_visualize_data(model, scaled_data, scaler, df):
     global training_data_len  # Ensure access to the global variable
 
     test_data = scaled_data[training_data_len - 60:, :]
 
-    x_test=[]
+    x_test = []
     y_test = df['close'][training_data_len:].values
-    # y_test=df[training_data_len:, :]
+
     for i in range(60, len(test_data)):
         x_test.append(test_data[i-60:i, 0])
 
     x_test = np.array(x_test)
-    
+
     if len(x_test.shape) == 2:
         x_test = np.reshape(x_test, (x_test.shape[0], x_test.shape[1], 1))
     else:
         print("Unexpected shape of x_test:", x_test.shape)
+
+    print("Shape of x_test before predictions:", x_test.shape)
 
     predictions = model.predict(x_test)
     predictions = scaler.inverse_transform(predictions)
@@ -86,6 +89,7 @@ def predict_visualize_data(model, scaled_data, scaler, df):
     plt.plot(test[['close', 'predictions']])
     plt.legend(['Train', 'Test', 'Predictions'], loc='lower right')
     plt.savefig('static/plot.png')
+
 
 # Route for the main page
 @app.route('/')
