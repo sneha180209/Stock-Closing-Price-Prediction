@@ -49,19 +49,21 @@ def build_train_model(scaled_data):
     return model
 
 
+# Function to predict and visualize the data
 def predict_visualize_data(model, scaled_data, scaler, df):
     test_data = scaled_data[training_data_len - 60:, :]
 
     x_test, y_test = [], df['close'][training_data_len:].values
     for i in range(60, len(test_data)):
         x_test.append(test_data[i-60:i, 0])
+        print("Length of x_test during loop:", len(x_test))  # Add this line to check length
 
     x_test = np.array(x_test)
 
-    if len(x_test.shape) == 2:
-        x_test = np.reshape(x_test, (x_test.shape[0], x_test.shape[1], 1))
-    elif len(x_test.shape) == 3:
+    if len(x_test.shape) == 3:
         x_test = x_test
+    elif len(x_test.shape) == 2:
+        x_test = np.reshape(x_test, (x_test.shape[0], x_test.shape[1], 1))
     else:
         raise ValueError("Unexpected shape of x_test:", x_test.shape)
 
@@ -83,6 +85,7 @@ def predict_visualize_data(model, scaled_data, scaler, df):
     plt.plot(test[['close', 'predictions']])
     plt.legend(['Train', 'Test', 'Predictions'], loc='lower right')
     plt.savefig('static/plot.png')
+
 
 
 # Route for the main page
