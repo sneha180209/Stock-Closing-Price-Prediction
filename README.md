@@ -1,4 +1,4 @@
 # Stock Closing Price Prediction
 
-Stock Closing Price Prediction Using LSTM
+Stock Closing Price Prediction Using LSTM.
 
